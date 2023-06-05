@@ -5,6 +5,7 @@ This is my repository for my experiments in using a pi pico to control a VTech v
 
 Console pinout, using default numbering for ps/2 style female connector. Perspective is from the front of console looking in. Meaning that the
 controller connection is flipped.
+<pre>
 6			5
 4			3
 	2	1
@@ -15,7 +16,7 @@ controller connection is flipped.
 4 GND 
 5 Tx (from controller) (connect to GPIO5 UART1 RX on pico )
 6 RTS (from controller) has pulse to low when pushing buttons
-
+</pre>
 Notes:
 
 * After a while of idling the joysting stops sending data. 
