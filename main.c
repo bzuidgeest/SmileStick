@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "core2.h"
+
+#define HIGH true
+#define LOW false
 
 #define UART_ID uart1
 #define BAUD_RATE 4800
@@ -12,6 +16,10 @@
 
 char data = 0x00;
 
+// What is the maximum number of bytes per transmission? 
+// Haven't seen more then two byte per lowering of RTS.
+char packet[4] = { 0, 0, 0, 0 };
+char* packetPointer = packet;
 
 
 bool repeating_timer_callback(struct repeating_timer *t) {
@@ -31,12 +39,26 @@ bool repeating_timer_callback(struct repeating_timer *t) {
 
 // RX interrupt handler
 void on_uart_rx() {
-    while (uart_is_readable(UART_ID)) {
-        uint8_t ch = uart_getc(UART_ID);
-        printf("in: %d\n", ch);
-		data = ch;
-		if (gpio_get(RTS) == true)
+
+	// Read all bytes offered by the controller in one go.
+    while (uart_is_readable(UART_ID) || gpio_get(RTS) == LOW) {
+        
+		*packetPointer = uart_getc(UART_ID);
+
+		printf("in: %d\n", *packetPointer);
+		data = *packetPointer;
+		packetPointer++;
+		
+		if (gpio_get(RTS) == HIGH)
 		{
+			stickData_t stickData;
+			memcpy(stickData.message, packet, 2);
+			stickData.length = 2;
+
+			queue_add_blocking(&call_queue, &stickData);
+
+			// reset packet pointer
+			packetPointer = packet;
 			// if RTS is no longer low pull CTS to low.
 			gpio_put(CTS, 0);
 		}
@@ -56,6 +78,25 @@ void rts_callback(uint gpio, uint32_t events) {
 	}
 }
 
+bool sendByte(char data)
+{
+	// Check if no transmission is ongoing
+	// Not sure if this is needed. Can we send while the controller is transmitting?
+	//while (gpio_get(RTS) == LOW && gpio_get(CTS) == HIGH);
+
+    gpio_put(CTS, HIGH);
+	uart_putc_raw(UART_ID, data);
+	uart_tx_wait_blocking(UART_ID);
+	//busy_wait_ms(3);
+
+	// Set CTS low if no transmission from the controller is ongoing.
+	if (gpio_get(RTS) == HIGH)
+		gpio_put(CTS, LOW);
+
+	// Remove this wait?
+	//busy_wait_ms(1);
+}
+
 int main() {
 
 	char state = 0;
@@ -65,6 +106,12 @@ int main() {
 	struct repeating_timer timer;
 
     stdio_init_all();
+
+
+    queue_init(&call_queue, sizeof(stickData_t), 10);
+    //queue_init(&results_queue, sizeof(int32_t), 2);
+
+    multicore_launch_core1(coreUSBMain);
 
 	// CTS
  	gpio_init(CTS);
