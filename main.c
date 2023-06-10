@@ -18,7 +18,7 @@ char data = 0x00;
 
 // What is the maximum number of bytes per transmission? 
 // Haven't seen more then two byte per lowering of RTS.
-char packet[4] = { 0, 0, 0, 0 };
+char packet[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 char* packetPointer = packet;
 
 
@@ -28,11 +28,12 @@ bool repeating_timer_callback(struct repeating_timer *t) {
 	while (gpio_get(RTS) == false && gpio_get(CTS) == true);
 
 	printf("Sending 20s wake up!");
-    gpio_put(CTS, 1);
-	uart_putc_raw(UART_ID, 0xB9);
-	busy_wait_ms(3);
-	gpio_put(CTS, 0);
-	busy_wait_ms(15);
+    // gpio_put(CTS, 1);
+	// uart_putc_raw(UART_ID, 0xB9);
+	// busy_wait_ms(3);
+	// gpio_put(CTS, 0);
+	// busy_wait_ms(15);
+	sendByte(0xB9);
     return true;
 }
 
@@ -45,22 +46,22 @@ void on_uart_rx() {
         
 		*packetPointer = uart_getc(UART_ID);
 
-		printf("in: %d\n", *packetPointer);
+		//printf("in: %d\n", *packetPointer);
 		data = *packetPointer;
 		packetPointer++;
 		
 		if (gpio_get(RTS) == HIGH)
 		{
 			stickData_t stickData;
-			memcpy(stickData.message, packet, 2);
-			stickData.length = 2;
+			memcpy(stickData.message, packet, packetPointer - packet);
+			stickData.length = packetPointer - packet;
 
-			queue_add_blocking(&call_queue, &stickData);
+			queue_add(&call_queue, &stickData);
 
 			// reset packet pointer
 			packetPointer = packet;
 			// if RTS is no longer low pull CTS to low.
-			gpio_put(CTS, 0);
+			//gpio_put(CTS, 0);
 		}
     }
 }
@@ -72,8 +73,16 @@ void rts_callback(uint gpio, uint32_t events) {
 	{
 		if (events = GPIO_IRQ_EDGE_FALL)
 		{
-			gpio_put(CTS, 1);
-    		printf("RTS Fall");
+			gpio_put(CTS, HIGH);
+    		//printf("RTS Fall");
+		}
+
+		if (events = GPIO_IRQ_EDGE_RISE && RTS == HIGH)
+		{
+			// Does it matter for the controller if we put CTS high before at the rise of RTS but before 
+			// it sends the final byte, which happens after RTS goes high?
+			gpio_put(CTS, LOW);
+    		//printf("RTS Rise");
 		}
 	}
 }
@@ -94,7 +103,7 @@ bool sendByte(char data)
 		gpio_put(CTS, LOW);
 
 	// Remove this wait?
-	//busy_wait_ms(1);
+	busy_wait_ms(1);
 }
 
 int main() {
@@ -166,27 +175,30 @@ int main() {
 	// 0x78 only send once on "startup", before that no stick data
 	// 0xBX about every 20 ms. No idea about function. keep-alive?
     while (true) {
-		if (data == 0x55 && gpio_get(RTS) == true)
+		if (data == 0x55 && gpio_get(RTS) == HIGH)
 		{
-			sleep_ms(20);
+			//sleep_ms(20);
 
-			gpio_put(CTS, 1);
-			uart_putc_raw(UART_ID, 0xE6);
-			sleep_ms(3);
-			gpio_put(CTS, 0);
-			sleep_ms(15);
+			// gpio_put(CTS, 1);
+			// uart_putc_raw(UART_ID, 0xE6);
+			// sleep_ms(3);
+			// gpio_put(CTS, 0);
+			// sleep_ms(15);
+			sendByte(0xE6);
 
-			gpio_put(CTS, 1);
-			uart_putc_raw(UART_ID, 0xD6);
-			sleep_ms(3);
-			gpio_put(CTS, 0);
-			sleep_ms(15);
+			// gpio_put(CTS, 1);
+			// uart_putc_raw(UART_ID, 0xD6);
+			// sleep_ms(3);
+			// gpio_put(CTS, 0);
+			// sleep_ms(15);
+			sendByte(0xD6);
 
-			gpio_put(CTS, 1);
-			uart_putc_raw(UART_ID, leds);
-			sleep_ms(3);
-			gpio_put(CTS, 0);
-			sleep_ms(15);
+			// gpio_put(CTS, 1);
+			// uart_putc_raw(UART_ID, leds);
+			// sleep_ms(3);
+			// gpio_put(CTS, 0);
+			// sleep_ms(15);
+			sendByte(leds);
 
 			data = 0x00;
 
@@ -194,20 +206,21 @@ int main() {
 			{
 				sleep_ms(200);
 
-				if (gpio_get(RTS) == true)
+				if (gpio_get(RTS) == HIGH)
 				{
-					gpio_put(CTS, 1);
-					uart_putc_raw(UART_ID, 0x78);
-					sleep_ms(3);
-					gpio_put(CTS, 0);
-					sleep_ms(15);
-					startup = false;
+					// gpio_put(CTS, 1);
+					// uart_putc_raw(UART_ID, 0x78);
+					// sleep_ms(3);
+					// gpio_put(CTS, 0);
+					// sleep_ms(15);
+					sendByte(0x78);
 
-					gpio_put(CTS, 1);
-					uart_putc_raw(UART_ID, 0xB9);
-					sleep_ms(3);
-					gpio_put(CTS, 0);
-					sleep_ms(15);
+					// gpio_put(CTS, 1);
+					// uart_putc_raw(UART_ID, 0xB9);
+					// sleep_ms(3);
+					// gpio_put(CTS, 0);
+					// sleep_ms(15);
+					sendByte(0xB9);
 					startup = false;
 
 					
@@ -219,18 +232,18 @@ int main() {
 			}
 		}
 
-		if (gpio_get(RTS) == true)
-		{
-			gpio_put(CTS, 1);
-			leds = blink ? 0x61 : 0x60;
-			blink = !blink;
-			uart_putc_raw(UART_ID, leds);
-			sleep_ms(3);
-			gpio_put(CTS, 0);
-			sleep_ms(15);
+		// if (gpio_get(RTS) == true)
+		// {
+		// 	gpio_put(CTS, 1);
+		// 	leds = blink ? 0x61 : 0x60;
+		// 	blink = !blink;
+		// 	uart_putc_raw(UART_ID, leds);
+		// 	sleep_ms(3);
+		// 	gpio_put(CTS, 0);
+		// 	sleep_ms(15);
 			
-		}
-		sleep_ms(200);
+		// }
+		// sleep_ms(200);
     }
     return 0;
 }
