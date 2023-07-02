@@ -13,10 +13,14 @@ if (TARGET tinyusb_device)
 
     add_executable(SmileStick
         main.c
+        core2.c
     )
 
     # Add pico_stdlib library which aggregates commonly used features
-    target_link_libraries(SmileStick pico_stdlib)
+    target_link_libraries(SmileStick 
+        pico_multicore 
+        pico_stdlib
+    )
 
     # enable usb output, disable uart output
     pico_enable_stdio_usb(SmileStick 1)

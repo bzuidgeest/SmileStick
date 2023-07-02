@@ -1,5 +1,7 @@
-#include <stdio.h>
-#include "pico/stdlib.h"
+#include "main.h"
+
+#define HIGH true
+#define LOW false
 
 #define UART_ID uart1
 #define BAUD_RATE 4800
@@ -12,6 +14,10 @@
 
 char data = 0x00;
 
+// What is the maximum number of bytes per transmission? 
+// Haven't seen more then two byte per lowering of RTS.
+char packet[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+char* packetPointer = packet;
 
 
 bool repeating_timer_callback(struct repeating_timer *t) {
@@ -19,26 +25,42 @@ bool repeating_timer_callback(struct repeating_timer *t) {
 	// Wait for any current activity to finish
 	while (gpio_get(RTS) == false && gpio_get(CTS) == true);
 
-	printf("Sending 20s wake up!");
-    gpio_put(CTS, 1);
-	uart_putc_raw(UART_ID, 0xB9);
-	busy_wait_ms(3);
-	gpio_put(CTS, 0);
-	busy_wait_ms(15);
+	printf("Sending 20s wake up!\r\n");
+    // gpio_put(CTS, 1);
+	// uart_putc_raw(UART_ID, 0xB9);
+	// busy_wait_ms(3);
+	// gpio_put(CTS, 0);
+	// busy_wait_ms(15);
+	sendByte(0xB9);
     return true;
 }
 
 
 // RX interrupt handler
 void on_uart_rx() {
-    while (uart_is_readable(UART_ID)) {
-        uint8_t ch = uart_getc(UART_ID);
-        printf("in: %d\n", ch);
-		data = ch;
-		if (gpio_get(RTS) == true)
+
+	// Read all bytes offered by the controller in one go.
+    while (uart_is_readable(UART_ID) || gpio_get(RTS) == LOW) {
+	//while (uart_is_readable(UART_ID)) {
+        
+		*packetPointer = uart_getc(UART_ID);
+
+		//printf("in: %d\n", *packetPointer);
+		data = *packetPointer;
+		packetPointer++;
+		
+		if (gpio_get(RTS) == HIGH)
 		{
+			stickData_t stickData;
+			memcpy(stickData.message, packet, packetPointer - packet);
+			stickData.length = packetPointer - packet;
+
+			queue_try_add(&call_queue, &stickData);
+
+			// reset packet pointer
+			packetPointer = packet;
 			// if RTS is no longer low pull CTS to low.
-			gpio_put(CTS, 0);
+			//gpio_put(CTS, 0);
 		}
     }
 }
@@ -48,16 +70,44 @@ void rts_callback(uint gpio, uint32_t events) {
     // so we can print it
 	if (gpio == RTS)
 	{
-		if (events = GPIO_IRQ_EDGE_FALL)
+		
+		if (events = GPIO_IRQ_EDGE_FALL && gpio_get(RTS) == LOW)
 		{
-			gpio_put(CTS, 1);
-    		printf("RTS Fall");
+			gpio_put(CTS, HIGH);
+    		//printf("RTS Fall\r\n");
+		}
+
+		if (events = GPIO_IRQ_EDGE_RISE && gpio_get(RTS) == HIGH)
+		{
+			// Does it matter for the controller if we put CTS high before at the rise of RTS but before 
+			// it sends the final byte, which happens after RTS goes high?
+			gpio_put(CTS, LOW);
+    		//printf("RTS Rise\r\n");
 		}
 	}
 }
 
-int main() {
+bool sendByte(char data)
+{
+	//printf("hello");
+	// Check if no transmission is ongoing
+	// Not sure if this is needed. Can we send while the controller is transmitting?
+	//while (gpio_get(RTS) == LOW && gpio_get(CTS) == HIGH);
 
+    gpio_put(CTS, HIGH);
+	uart_putc_raw(UART_ID, data);
+	uart_tx_wait_blocking(UART_ID);
+	//busy_wait_ms(3);
+
+	// Set CTS low if no transmission from the controller is ongoing.
+	if (gpio_get(RTS) == HIGH)
+		gpio_put(CTS, LOW);
+
+	// Remove this wait?
+	busy_wait_ms(1);
+}
+
+int main() {
 	char state = 0;
 	int leds = 0x60;
 	bool blink = true;
@@ -65,6 +115,15 @@ int main() {
 	struct repeating_timer timer;
 
     stdio_init_all();
+
+
+sleep_ms(1000);
+printf("start\r\n");
+   
+    queue_init(&call_queue, sizeof(stickData_t), 10);
+    //queue_init(&results_queue, sizeof(int32_t), 2);
+
+    multicore_launch_core1(coreUSBMain);
 
 	// CTS
  	gpio_init(CTS);
@@ -103,9 +162,9 @@ int main() {
     // Now enable the UART to send interrupts - RX only
     uart_set_irq_enables(UART_ID, true, false);
 	
-	gpio_set_irq_enabled_with_callback(RTS, GPIO_IRQ_EDGE_FALL, true, &rts_callback);
+	gpio_set_irq_enabled_with_callback(RTS, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &rts_callback);
 
-
+printf("hello2");
     // Send out a character without any conversions
     //uart_putc_raw(UART_ID, 'A');
 
@@ -119,48 +178,53 @@ int main() {
 	// 0x78 only send once on "startup", before that no stick data
 	// 0xBX about every 20 ms. No idea about function. keep-alive?
     while (true) {
-		if (data == 0x55 && gpio_get(RTS) == true)
+		
+		if (data == 0x55 && gpio_get(RTS) == HIGH)
 		{
-			sleep_ms(20);
+			//sleep_ms(20);
 
-			gpio_put(CTS, 1);
-			uart_putc_raw(UART_ID, 0xE6);
-			sleep_ms(3);
-			gpio_put(CTS, 0);
-			sleep_ms(15);
+			// gpio_put(CTS, 1);
+			// uart_putc_raw(UART_ID, 0xE6);
+			// sleep_ms(3);
+			// gpio_put(CTS, 0);
+			// sleep_ms(15);
+			sendByte(0xE6);
 
-			gpio_put(CTS, 1);
-			uart_putc_raw(UART_ID, 0xD6);
-			sleep_ms(3);
-			gpio_put(CTS, 0);
-			sleep_ms(15);
+			// gpio_put(CTS, 1);
+			// uart_putc_raw(UART_ID, 0xD6);
+			// sleep_ms(3);
+			// gpio_put(CTS, 0);
+			// sleep_ms(15);
+			sendByte(0xD6);
 
-			gpio_put(CTS, 1);
-			uart_putc_raw(UART_ID, leds);
-			sleep_ms(3);
-			gpio_put(CTS, 0);
-			sleep_ms(15);
+			// gpio_put(CTS, 1);
+			// uart_putc_raw(UART_ID, leds);
+			// sleep_ms(3);
+			// gpio_put(CTS, 0);
+			// sleep_ms(15);
+			sendByte(leds);
 
 			data = 0x00;
 
 			if (startup == true)
 			{
 				sleep_ms(200);
-
-				if (gpio_get(RTS) == true)
+printf("start command\r\n");
+				if (gpio_get(RTS) == HIGH)
 				{
-					gpio_put(CTS, 1);
-					uart_putc_raw(UART_ID, 0x78);
-					sleep_ms(3);
-					gpio_put(CTS, 0);
-					sleep_ms(15);
-					startup = false;
+					// gpio_put(CTS, 1);
+					// uart_putc_raw(UART_ID, 0x78);
+					// sleep_ms(3);
+					// gpio_put(CTS, 0);
+					// sleep_ms(15);
+					sendByte(0x78);
 
-					gpio_put(CTS, 1);
-					uart_putc_raw(UART_ID, 0xB9);
-					sleep_ms(3);
-					gpio_put(CTS, 0);
-					sleep_ms(15);
+					// gpio_put(CTS, 1);
+					// uart_putc_raw(UART_ID, 0xB9);
+					// sleep_ms(3);
+					// gpio_put(CTS, 0);
+					// sleep_ms(15);
+					sendByte(0xB9);
 					startup = false;
 
 					
@@ -172,18 +236,18 @@ int main() {
 			}
 		}
 
-		if (gpio_get(RTS) == true)
-		{
-			gpio_put(CTS, 1);
-			leds = blink ? 0x61 : 0x60;
-			blink = !blink;
-			uart_putc_raw(UART_ID, leds);
-			sleep_ms(3);
-			gpio_put(CTS, 0);
-			sleep_ms(15);
+		// if (gpio_get(RTS) == true)
+		// {
+		// 	gpio_put(CTS, 1);
+		// 	leds = blink ? 0x61 : 0x60;
+		// 	blink = !blink;
+		// 	uart_putc_raw(UART_ID, leds);
+		// 	sleep_ms(3);
+		// 	gpio_put(CTS, 0);
+		// 	sleep_ms(15);
 			
-		}
-		sleep_ms(200);
+		// }
+		// sleep_ms(200);
     }
     return 0;
 }
