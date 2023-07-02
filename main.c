@@ -1,6 +1,4 @@
-#include <stdio.h>
-#include "pico/stdlib.h"
-#include "core2.h"
+#include "main.h"
 
 #define HIGH true
 #define LOW false
@@ -27,7 +25,7 @@ bool repeating_timer_callback(struct repeating_timer *t) {
 	// Wait for any current activity to finish
 	while (gpio_get(RTS) == false && gpio_get(CTS) == true);
 
-	printf("Sending 20s wake up!");
+	printf("Sending 20s wake up!\r\n");
     // gpio_put(CTS, 1);
 	// uart_putc_raw(UART_ID, 0xB9);
 	// busy_wait_ms(3);
@@ -43,6 +41,7 @@ void on_uart_rx() {
 
 	// Read all bytes offered by the controller in one go.
     while (uart_is_readable(UART_ID) || gpio_get(RTS) == LOW) {
+	//while (uart_is_readable(UART_ID)) {
         
 		*packetPointer = uart_getc(UART_ID);
 
@@ -56,7 +55,7 @@ void on_uart_rx() {
 			memcpy(stickData.message, packet, packetPointer - packet);
 			stickData.length = packetPointer - packet;
 
-			queue_add(&call_queue, &stickData);
+			queue_try_add(&call_queue, &stickData);
 
 			// reset packet pointer
 			packetPointer = packet;
@@ -71,24 +70,26 @@ void rts_callback(uint gpio, uint32_t events) {
     // so we can print it
 	if (gpio == RTS)
 	{
-		if (events = GPIO_IRQ_EDGE_FALL)
+		
+		if (events = GPIO_IRQ_EDGE_FALL && gpio_get(RTS) == LOW)
 		{
 			gpio_put(CTS, HIGH);
-    		//printf("RTS Fall");
+    		//printf("RTS Fall\r\n");
 		}
 
-		if (events = GPIO_IRQ_EDGE_RISE && RTS == HIGH)
+		if (events = GPIO_IRQ_EDGE_RISE && gpio_get(RTS) == HIGH)
 		{
 			// Does it matter for the controller if we put CTS high before at the rise of RTS but before 
 			// it sends the final byte, which happens after RTS goes high?
 			gpio_put(CTS, LOW);
-    		//printf("RTS Rise");
+    		//printf("RTS Rise\r\n");
 		}
 	}
 }
 
 bool sendByte(char data)
 {
+	//printf("hello");
 	// Check if no transmission is ongoing
 	// Not sure if this is needed. Can we send while the controller is transmitting?
 	//while (gpio_get(RTS) == LOW && gpio_get(CTS) == HIGH);
@@ -107,7 +108,6 @@ bool sendByte(char data)
 }
 
 int main() {
-
 	char state = 0;
 	int leds = 0x60;
 	bool blink = true;
@@ -117,6 +117,9 @@ int main() {
     stdio_init_all();
 
 
+sleep_ms(1000);
+printf("start\r\n");
+   
     queue_init(&call_queue, sizeof(stickData_t), 10);
     //queue_init(&results_queue, sizeof(int32_t), 2);
 
@@ -159,9 +162,9 @@ int main() {
     // Now enable the UART to send interrupts - RX only
     uart_set_irq_enables(UART_ID, true, false);
 	
-	gpio_set_irq_enabled_with_callback(RTS, GPIO_IRQ_EDGE_FALL, true, &rts_callback);
+	gpio_set_irq_enabled_with_callback(RTS, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &rts_callback);
 
-
+printf("hello2");
     // Send out a character without any conversions
     //uart_putc_raw(UART_ID, 'A');
 
@@ -175,6 +178,7 @@ int main() {
 	// 0x78 only send once on "startup", before that no stick data
 	// 0xBX about every 20 ms. No idea about function. keep-alive?
     while (true) {
+		
 		if (data == 0x55 && gpio_get(RTS) == HIGH)
 		{
 			//sleep_ms(20);
@@ -205,7 +209,7 @@ int main() {
 			if (startup == true)
 			{
 				sleep_ms(200);
-
+printf("start command\r\n");
 				if (gpio_get(RTS) == HIGH)
 				{
 					// gpio_put(CTS, 1);

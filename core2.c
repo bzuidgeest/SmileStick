@@ -1,7 +1,5 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "pico/util/queue.h"
-#include "pico/multicore.h"
 #include "core2.h"
 
 
@@ -16,15 +14,15 @@ void coreUSBMain() {
 
         if (stickData.length == 1)
         {
-            printfn("Received message of length %d, %d.", stickData.length, stickData.message[0]);
+            printf("Received message of length %d, %d.\r\n", stickData.length, stickData.message[0]);
         }
-        else if (stickData.length == 1)
+        else if (stickData.length == 2)
         {
-            printfn("Received message of length %d, %d, %d.", stickData.length, stickData.message[0], stickData.message[1]);
+            printf("Received message of length %d, %d, %d.\r\n", stickData.length, stickData.message[0], stickData.message[1]);
         }
         else
         {
-            printfn("Received message of length %d.", stickData.length);
+            printf("Received message of length %d.\r\n", stickData.length);
         }
         //int32_t (*func)() = (int32_t(*)())(entry.func);
         //int32_t result = (*func)(entry.data);
