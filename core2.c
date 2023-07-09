@@ -2,6 +2,10 @@
 #include "pico/stdlib.h"
 #include "core2.h"
 
+enum colorButton { off = 0x00, green = 0x01, blue = 0x02, yellow = 0x04, red = 0x8 };
+
+enum colorButton currentCButtonState = off;
+enum colorButton previousCButtonState = off;
 
 void coreUSBMain() {
     while (1) {
@@ -37,10 +41,20 @@ void coreUSBMain() {
             }
             if ((stickData.message[i] & 0xF0) == 0x90)
             {
-                greenButton = (stickData.message[i] & 0x01) ? true : false;
-                blueButton = (stickData.message[i] & 0x02) ? true : false;
-                yellowButton = (stickData.message[i] & 0x04) ? true : false;
-                redButton = (stickData.message[i] & 0x08) ? true : false;
+                // greenButton = (stickData.message[i] & 0x01) ? true : false;
+                // blueButton = (stickData.message[i] & 0x02) ? true : false;
+                // yellowButton = (stickData.message[i] & 0x04) ? true : false;
+                // redButton = (stickData.message[i] & 0x08) ? true : false;
+                currentCButtonState = (stickData.message[i] & 0x0F);
+                
+                if (currentCButtonState != previousCButtonState)
+                {
+                    previousCButtonState = currentCButtonState;
+                    char leds = 0x60 + (char)currentCButtonState;
+                    // Turn on leds on color buttons if pressed.
+                    queue_try_add(&outputQueue, &leds);
+                }
+
             }
             if ((stickData.message[i] & 0xF0) == 0xA0)
             {
@@ -82,6 +96,8 @@ void coreUSBMain() {
             }
         
         }
+
+        
         printState();
         //int32_t (*func)() = (int32_t(*)())(entry.func);
         //int32_t result = (*func)(entry.data);
@@ -91,10 +107,16 @@ void coreUSBMain() {
 }
 
 void printState() {
-	printf(redButton ? "R1 " : "R0 ");
-    printf(yellowButton ? "Y1 " : "Y0 ");
-    printf(blueButton ? "B1 " : "B0 ");
-    printf(greenButton ? "G1 " : "G0 ");
+	// printf(redButton ? "R1 " : "R0 ");
+    // printf(yellowButton ? "Y1 " : "Y0 ");
+    // printf(blueButton ? "B1 " : "B0 ");
+    // printf(greenButton ? "G1 " : "G0 ");
+
+    printf((currentCButtonState & red) ? "R1 " : "R0 ");
+    printf((currentCButtonState & yellow) ? "Y1 " : "Y0 ");
+    printf((currentCButtonState & blue) ? "B1 " : "B0 ");
+    printf((currentCButtonState & green) ? "G1 " : "G0 ");
+
     printf(enterButton ? "e1 " : "e0 ");
     printf(helpButton ? "h1 " : "h0 ");
     printf(exitButton ? "x1 " : "x0 ");

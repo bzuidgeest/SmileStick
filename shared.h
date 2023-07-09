@@ -1,5 +1,8 @@
 #include <stdio.h>
 
+
+
+
 typedef struct
 {
     char message[10];

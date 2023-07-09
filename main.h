@@ -11,4 +11,6 @@
 
 queue_t call_queue;
 
+queue_t outputQueue;
+
 bool sendByte(char data);

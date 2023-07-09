@@ -121,7 +121,7 @@ sleep_ms(1000);
 printf("start\r\n");
    
     queue_init(&call_queue, sizeof(stickData_t), 10);
-    //queue_init(&results_queue, sizeof(int32_t), 2);
+	queue_init(&outputQueue, sizeof(char), 10);
 
     multicore_launch_core1(coreUSBMain);
 
@@ -164,44 +164,21 @@ printf("start\r\n");
 	
 	gpio_set_irq_enabled_with_callback(RTS, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &rts_callback);
 
-printf("hello2");
-    // Send out a character without any conversions
-    //uart_putc_raw(UART_ID, 'A');
-
-    // Send out a character but do CR/LF conversions
-    //uart_putc(UART_ID, 'B');
-
-    // Send out a string, with CR/LF conversions
-    //uart_puts(UART_ID, " Hello, UART!\n");
-
-
 	// 0x78 only send once on "startup", before that no stick data
 	// 0xBX about every 20 ms. No idea about function. keep-alive?
     while (true) {
 		
+		// Check if there is anything that needs to be set on the controller.
+		// As of now that is only the led state.
+		if(queue_try_remove(&outputQueue, &leds))
+		{
+			sendByte(leds);
+		}
+
 		if (data == 0x55 && gpio_get(RTS) == HIGH)
 		{
-			//sleep_ms(20);
-
-			// gpio_put(CTS, 1);
-			// uart_putc_raw(UART_ID, 0xE6);
-			// sleep_ms(3);
-			// gpio_put(CTS, 0);
-			// sleep_ms(15);
 			sendByte(0xE6);
-
-			// gpio_put(CTS, 1);
-			// uart_putc_raw(UART_ID, 0xD6);
-			// sleep_ms(3);
-			// gpio_put(CTS, 0);
-			// sleep_ms(15);
 			sendByte(0xD6);
-
-			// gpio_put(CTS, 1);
-			// uart_putc_raw(UART_ID, leds);
-			// sleep_ms(3);
-			// gpio_put(CTS, 0);
-			// sleep_ms(15);
 			sendByte(leds);
 
 			data = 0x00;
@@ -209,24 +186,12 @@ printf("hello2");
 			if (startup == true)
 			{
 				sleep_ms(200);
-printf("start command\r\n");
+				printf("start command\r\n");
 				if (gpio_get(RTS) == HIGH)
 				{
-					// gpio_put(CTS, 1);
-					// uart_putc_raw(UART_ID, 0x78);
-					// sleep_ms(3);
-					// gpio_put(CTS, 0);
-					// sleep_ms(15);
 					sendByte(0x78);
-
-					// gpio_put(CTS, 1);
-					// uart_putc_raw(UART_ID, 0xB9);
-					// sleep_ms(3);
-					// gpio_put(CTS, 0);
-					// sleep_ms(15);
 					sendByte(0xB9);
 					startup = false;
-
 					
 					// repeat the 0xBX value every 20 seconds.
 					// SDK uses negative values to indicate callback execution time should not affect the interval
