@@ -6,7 +6,7 @@
 void printState();
 
 extern queue_t call_queue;
-//queue_t results_queue;
+extern queue_t outputQueue;
 
 
 static bool redButton = false;
