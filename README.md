@@ -1,6 +1,6 @@
 # SmileStick
 
-* Cleanup branch is work in progress to make some nicer code.
+
 
 This is my repository for my experiments in using a pi pico to control a VTech v.SMILE controller.
 
